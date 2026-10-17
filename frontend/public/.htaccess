@@ -1,0 +1,12 @@
+# React Router fallback for Namecheap Apache/LiteSpeed hosting.
+# Install beside index.html in each website document root.
+Options -MultiViews
+DirectoryIndex index.html
+
+RewriteEngine On
+# Keep API and asset errors as real errors rather than returning application HTML.
+RewriteRule ^(?:api|assets)(?:/|$) - [L,NC]
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+RewriteRule ^ index.html [L]

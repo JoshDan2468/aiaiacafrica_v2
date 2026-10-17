@@ -1,0 +1,63 @@
+name: Deploy backend environment
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure SSH and deployment target
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+          DEPLOY_DIRECTORY: ${{ vars.DEPLOY_DIRECTORY }}
+          READINESS_URL: ${{ vars.API_READINESS_URL }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$DEPLOY_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          [[ "$DEPLOY_DIRECTORY" =~ ^/opt/aiaiac-(staging|test|production)$ ]]
+          [[ "$READINESS_URL" =~ ^https://[a-zA-Z0-9.-]+/api/ready$ ]]
+          test -n "$SSH_KEY" && test -n "$KNOWN_HOSTS"
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/id_ed25519 ~/.ssh/known_hosts
+          {
+            echo "DEPLOY_TARGET=$DEPLOY_USER@$DEPLOY_HOST"
+            echo "DEPLOY_DIRECTORY=$DEPLOY_DIRECTORY"
+            echo "READINESS_URL=$READINESS_URL"
+          } >> "$GITHUB_ENV"
+      - name: Upload deployment files
+        run: |
+          set -euo pipefail
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$DEPLOY_TARGET" "test -d '$DEPLOY_DIRECTORY' && test -f '$DEPLOY_DIRECTORY/.env' && test -f '$DEPLOY_DIRECTORY/deploy/backend.env'"
+          release="$DEPLOY_DIRECTORY/releases/$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          ssh -o BatchMode=yes "$DEPLOY_TARGET" "mkdir -p '$release'"
+          scp -o BatchMode=yes compose.yaml scripts/deploy-backend.sh "$DEPLOY_TARGET:$release/"
+          echo "RELEASE_DIRECTORY=$release" >> "$GITHUB_ENV"
+      - name: Back up, deploy, and verify
+        env:
+          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
+          DEPLOY_IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_IMAGE" =~ ^docker.io/[a-z0-9_-]+/[a-z0-9._-]+@sha256:[a-f0-9]{64}$ ]]
+          ssh -o BatchMode=yes "$DEPLOY_TARGET" "bash '$RELEASE_DIRECTORY/deploy-backend.sh' '$DEPLOY_ENVIRONMENT' '$DEPLOY_DIRECTORY' '$RELEASE_DIRECTORY' '$DEPLOY_IMAGE' '$READINESS_URL'"
+          echo "Deployed $DEPLOY_IMAGE to $DEPLOY_ENVIRONMENT" >> "$GITHUB_STEP_SUMMARY"
+      - name: Remove runner SSH credentials
+        if: always()
+        run: rm -f ~/.ssh/id_ed25519 ~/.ssh/known_hosts

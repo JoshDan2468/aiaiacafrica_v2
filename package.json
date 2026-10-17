@@ -1,0 +1,19 @@
+{
+  "name": "aiaiac-platform",
+  "private": true,
+  "scripts": {
+    "dev:frontend": "npm --prefix frontend run dev",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:admin": "npm --prefix admin run dev -- --port 5174 --strictPort",
+    "type-check:frontend": "npm --prefix frontend run type-check",
+    "type-check:backend": "npm --prefix backend run type-check",
+    "type-check": "npm run type-check:frontend && npm run type-check:backend",
+    "build:frontend": "npm --prefix frontend run build",
+    "build:backend": "npm --prefix backend run build",
+    "build": "npm run build:frontend && npm run build:backend",
+    "test:backend": "npm --prefix backend test",
+    "optimize:committee-images": "npm --prefix frontend run optimize:committee-images",
+    "map:committee-images": "npm --prefix frontend run map:committee-images",
+    "report:assets": "npm --prefix frontend run report:assets"
+  }
+}

@@ -1,0 +1,8 @@
+node_modules
+dist
+.git
+.env*
+.private
+email-previews
+test
+*.log
